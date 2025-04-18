@@ -1,0 +1,45 @@
+defaults:
+  - _self_
+  - data: null
+  - optim: null
+  - model: null
+  - wandb: null
+
+data:
+  dir: /data/serrano/airfrans/
+  data_to_encode: 
+  sample: mesh
+  task: full
+  score: 0 
+  ntrain : 
+  ntest : 
+  seed: 123
+
+inr:
+  run_dict:
+
+optim:
+  batch_size: 64
+  batch_size_val: 
+  lr : 1e-3
+  weight_decay: 0
+  gamma_step : 0.9
+  epochs : 1000
+
+model:
+  model_type: resnet
+  depth: 4
+  width: 256
+  activation: swish
+  dropout: 0.3
+  ddpm_steps: 500
+  run_name:
+
+wandb:
+  entity: "spatiotemp-isir"
+  project: "geo-pde-inr"
+  name: 
+  id: 
+  dir: 
+  sweep_id: 
+

@@ -1,0 +1,58 @@
+defaults:
+  - _self_
+  - data: null
+  - optim: null
+  - inr: null
+  - wandb: null
+
+functa:
+  dataset_name:
+  run_name:
+  encoding_steps: 3
+
+data:
+  dir: /data/serrano/airfrans/
+  data_to_encode: vx
+  sample: mesh
+  task: full
+  score: 0 
+  ntrain : 
+  ntest : 
+  seed: 123
+
+optim:
+  batch_size: 64
+  batch_size_val: 
+  lr_inr : 5e-5
+  lr_code : 0.01
+  lr_encoder: 1e-3
+  meta_lr_code : 5e-5
+  weight_decay_code: 0
+  inner_steps : 3
+  test_inner_steps : 3
+  epochs : 10000
+  weight_decay: 0
+
+inr:
+  model_type : "fourier_features"
+  include_input: False
+  latent_dim : 256
+  depth : 6
+  hidden_dim : 256
+  num_frequencies : 32
+  modulate_scale: False
+  modulate_shift: True
+  frequency_embedding: nerf
+  max_frequencies: 10
+  base_frequency: 2
+  scale : 5
+  loss_type: "mse"
+
+wandb:
+  entity: "spatiotemp-isir"
+  project: "geo-pde-inr"
+  name: 
+  id: 
+  dir: 
+  sweep_id: 
+
