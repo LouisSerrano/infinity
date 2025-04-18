@@ -100,7 +100,7 @@ def main(cfg: DictConfig) -> None:
     ntest = len(testset)
 
     tmp = torch.load(LOAD_DIR / "all_physics_fields" / f"{run_name_fields}.pt", weights_only=False)
-    latent_dim = tmp["cfg"].inr.latent_dim
+    latent_dim = tmp["cfg"].inr.latent_dim # WARNING we suppose every INR has the same latent dim.
 
     # default sample is none
     trainset = GeometryDatasetFull(
@@ -192,7 +192,7 @@ def main(cfg: DictConfig) -> None:
     test_loader = DataLoader(testset, batch_size=batch_size_val, shuffle=True)
 
     model = ResNet(
-        input_dim=2*latent_dim + 2 if include_normal else latent_dim + 1,
+        input_dim=2*latent_dim + 2 if include_normal else latent_dim + 2,
         hidden_dim=width,
         output_dim=latent_dim,
         depth=depth,

@@ -30,7 +30,7 @@ optim:
 
 inr:
   model_type : "siren"
-  latent_dim : 128
+  latent_dim : 256 # 128
   depth : 5
   hidden_dim : 128
   w0 : 5

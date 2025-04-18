@@ -14,7 +14,7 @@ conda init bash
 conda activate infinity_env 
 
 data_to_encode=sdf
-task=scarce
+task=full
 epochs=5000
 batch_size=64
 latent_dim=256
