@@ -31,8 +31,8 @@ def load_modulations(
 
         ntrain = len(train_loader.dataset)
         ntest = len(val_loader.dataset)
-        #trainset.modulation_only = False
-        #testset.modulation_only = False
+        # trainset.modulation_only = False
+        # testset.modulation_only = False
 
         fit_train_mse = 0
         fit_test_mse = 0
@@ -63,7 +63,9 @@ def load_modulations(
                 graph.images = torch.cat([graph.nx, graph.ny], axis=-1)
                 mask = graph.surface
             elif data_to_encode == "all_physics_fields":
-                graph.images = torch.cat([graph.vx, graph.vy, graph.p, graph.nu], axis=-1)
+                graph.images = torch.cat(
+                    [graph.vx, graph.vy, graph.p, graph.nu], axis=-1
+                )
 
             graph.pos = graph.pos[mask]
             graph.batch = graph.batch[mask]
@@ -112,7 +114,9 @@ def load_modulations(
                 graph.images = torch.cat([graph.nx, graph.ny], axis=-1)
                 mask = graph.surface
             elif data_to_encode == "all_physics_fields":
-                graph.images = torch.cat([graph.vx, graph.vy, graph.p, graph.nu], axis=-1)
+                graph.images = torch.cat(
+                    [graph.vx, graph.vy, graph.p, graph.nu], axis=-1
+                )
 
             graph.pos = graph.pos[mask]
             graph.batch = graph.batch[mask]
@@ -143,7 +147,7 @@ def load_modulations(
         modulations = {"z_train": mod_tr, "z_test": mod_te}
         torch.save(modulations, run_dir / f"{data_to_encode}/{run_name}.pt")
 
-        #trainset.modulation_only = True
-        #testset.modulation_only = True
+        # trainset.modulation_only = True
+        # testset.modulation_only = True
 
         return modulations

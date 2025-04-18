@@ -196,10 +196,9 @@ def outer_step(
     if use_rel_loss:
         rel_loss = batch_mse_rel_fn(features_recon, features).mean()
         outputs["rel_loss"] = rel_loss
-    
+
     if return_dim_loss:
         dim_loss = per_example_loss.mean(0)
         outputs["dim_loss"] = dim_loss
-
 
     return outputs

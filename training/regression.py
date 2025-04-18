@@ -22,7 +22,7 @@ from infinity.mlp import ResNet
 
 @hydra.main(config_path="config/", config_name="regression.yaml")
 def main(cfg: DictConfig) -> None:
-    # 
+    #
     # data
     data_dir = cfg.data.dir
     task = cfg.data.task
@@ -44,7 +44,7 @@ def main(cfg: DictConfig) -> None:
 
     # inr
     run_name_sdf = cfg.inr.run_dict.sdf
-    run_name_n = cfg.inr.run_dict.n  
+    run_name_n = cfg.inr.run_dict.n
     run_name_fields = cfg.inr.run_dict.all_physics_fields
 
     # model
@@ -99,8 +99,12 @@ def main(cfg: DictConfig) -> None:
     ntrain = len(trainset)
     ntest = len(testset)
 
-    tmp = torch.load(LOAD_DIR / "all_physics_fields" / f"{run_name_fields}.pt", weights_only=False)
-    latent_dim = tmp["cfg"].inr.latent_dim # WARNING we suppose every INR has the same latent dim.
+    tmp = torch.load(
+        LOAD_DIR / "all_physics_fields" / f"{run_name_fields}.pt", weights_only=False
+    )
+    latent_dim = tmp[
+        "cfg"
+    ].inr.latent_dim  # WARNING we suppose every INR has the same latent dim.
 
     # default sample is none
     trainset = GeometryDatasetFull(
@@ -138,9 +142,15 @@ def main(cfg: DictConfig) -> None:
         )
 
     mod_fields = load_modulations(
-        trainset, testset, inr_fields, MODULATIONS_DIR, run_name_fields, "all_physics_fields", alpha=alpha_fields
+        trainset,
+        testset,
+        inr_fields,
+        MODULATIONS_DIR,
+        run_name_fields,
+        "all_physics_fields",
+        alpha=alpha_fields,
     )
-    
+
     mod_sdf = load_modulations(
         trainset,
         testset,
@@ -153,14 +163,14 @@ def main(cfg: DictConfig) -> None:
     )
     if include_normal:
         mod_n = load_modulations(
-        trainset,
-        testset,
-        inr_n,
-        MODULATIONS_DIR,
-        run_name_n,
-        "n",
-        alpha=alpha_n,
-        input_dim=2,
+            trainset,
+            testset,
+            inr_n,
+            MODULATIONS_DIR,
+            run_name_n,
+            "n",
+            alpha=alpha_n,
+            input_dim=2,
         )
 
     gamma = 1
@@ -175,13 +185,17 @@ def main(cfg: DictConfig) -> None:
         mu_n = mod_n["z_train"].mean(0)
         sigma_n = mod_n["z_train"].std(0)
 
-    trainset.out_modulations["fields"] = (mod_fields["z_train"] - mu_fields) / sigma_fields
+    trainset.out_modulations["fields"] = (
+        mod_fields["z_train"] - mu_fields
+    ) / sigma_fields
     trainset.in_modulations["sdf"] = (mod_sdf["z_train"] - mu_sdf) / sigma_sdf
 
     if include_normal:
         trainset.in_modulations["n"] = (mod_n["z_train"] - mu_n) / sigma_n
 
-    testset.out_modulations["fields"] = (mod_fields["z_test"] - mu_fields) / sigma_fields
+    testset.out_modulations["fields"] = (
+        mod_fields["z_test"] - mu_fields
+    ) / sigma_fields
     testset.in_modulations["sdf"] = (mod_sdf["z_test"] - mu_sdf) / sigma_sdf
 
     if include_normal:
@@ -192,7 +206,7 @@ def main(cfg: DictConfig) -> None:
     test_loader = DataLoader(testset, batch_size=batch_size_val, shuffle=True)
 
     model = ResNet(
-        input_dim=2*latent_dim + 2 if include_normal else latent_dim + 2,
+        input_dim=2 * latent_dim + 2 if include_normal else latent_dim + 2,
         hidden_dim=width,
         output_dim=latent_dim,
         depth=depth,
@@ -201,7 +215,7 @@ def main(cfg: DictConfig) -> None:
     ).cuda()
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
- 
+
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer,
         mode="min",
@@ -242,15 +256,15 @@ def main(cfg: DictConfig) -> None:
             n_samples = len(graph)
 
             if include_normal:
-                  inpt = torch.cat(
-                [
-                    graph.z_sdf,
-                    graph.z_n,
-                    graph.inlet_x.unsqueeze(-1),
-                    graph.inlet_y.unsqueeze(-1),
-                ],
-                axis=-1,
-            )
+                inpt = torch.cat(
+                    [
+                        graph.z_sdf,
+                        graph.z_n,
+                        graph.inlet_x.unsqueeze(-1),
+                        graph.inlet_y.unsqueeze(-1),
+                    ],
+                    axis=-1,
+                )
             else:
                 inpt = torch.cat(
                     [
@@ -269,7 +283,7 @@ def main(cfg: DictConfig) -> None:
             code_train_mse += loss.item() * n_samples
 
             if step_show:
-                num_points = n_samples * 4000 # 4000 points per sample
+                num_points = n_samples * 4000  # 4000 points per sample
                 mask = torch.randperm(graph.pos.shape[0])[:num_points]
                 batch = graph.batch[mask]
                 mask_surf = graph.surface[mask]
@@ -279,16 +293,23 @@ def main(cfg: DictConfig) -> None:
 
                 pos = torch.cat([graph.pos, graph.sdf], axis=-1)
                 with torch.no_grad():
-                    pred = inr_fields.modulated_forward(pos[mask], z_pred[batch] * sigma_fields + mu_fields)
-                    pred_surf = inr_fields.modulated_forward(pos[graph.surface], z_pred[graph.batch[graph.surface]] * sigma_fields + mu_fields)
+                    pred = inr_fields.modulated_forward(
+                        pos[mask], z_pred[batch] * sigma_fields + mu_fields
+                    )
+                    pred_surf = inr_fields.modulated_forward(
+                        pos[graph.surface],
+                        z_pred[graph.batch[graph.surface]] * sigma_fields + mu_fields,
+                    )
 
-                mse = ((pred - images[mask])**2).mean(0)
+                mse = ((pred - images[mask]) ** 2).mean(0)
 
                 vx_train_mse += mse[0] * n_samples
                 vy_train_mse += mse[1] * n_samples
                 p_train_mse += mse[2] * n_samples
                 nu_train_mse += mse[3] * n_samples
-                p_surf_train_mse += ((pred_surf[..., 2] - images[graph.surface, 2])**2).mean() * n_samples
+                p_surf_train_mse += (
+                    (pred_surf[..., 2] - images[graph.surface, 2]) ** 2
+                ).mean() * n_samples
 
         code_train_loss = code_train_mse / ntrain
 
@@ -314,23 +335,24 @@ def main(cfg: DictConfig) -> None:
 
                 if include_normal:
                     inpt = torch.cat(
-                    [
-                        graph.z_sdf,
-                        graph.z_n,
-                        graph.inlet_x.unsqueeze(-1),
-                        graph.inlet_y.unsqueeze(-1),
-                    ],
-                    axis=-1)
+                        [
+                            graph.z_sdf,
+                            graph.z_n,
+                            graph.inlet_x.unsqueeze(-1),
+                            graph.inlet_y.unsqueeze(-1),
+                        ],
+                        axis=-1,
+                    )
 
                 else:
                     inpt = torch.cat(
-                    [
-                        graph.z_sdf,
-                        graph.inlet_x.unsqueeze(-1),
-                        graph.inlet_y.unsqueeze(-1),
-                    ],
-                    axis=-1,
-                )
+                        [
+                            graph.z_sdf,
+                            graph.inlet_x.unsqueeze(-1),
+                            graph.inlet_y.unsqueeze(-1),
+                        ],
+                        axis=-1,
+                    )
 
                 z_pred = model(inpt)
                 loss = ((z_pred - graph.z_fields) ** 2).mean()
@@ -345,16 +367,23 @@ def main(cfg: DictConfig) -> None:
 
                 pos = torch.cat([graph.pos, graph.sdf], axis=-1)
                 with torch.no_grad():
-                    pred = inr_fields.modulated_forward(pos[mask], z_pred[batch] * sigma_fields + mu_fields)
-                    pred_surf = inr_fields.modulated_forward(pos[graph.surface], z_pred[graph.batch[graph.surface]] * sigma_fields + mu_fields)
-                
-                mse = ((pred - images[mask])**2).mean(0)
+                    pred = inr_fields.modulated_forward(
+                        pos[mask], z_pred[batch] * sigma_fields + mu_fields
+                    )
+                    pred_surf = inr_fields.modulated_forward(
+                        pos[graph.surface],
+                        z_pred[graph.batch[graph.surface]] * sigma_fields + mu_fields,
+                    )
+
+                mse = ((pred - images[mask]) ** 2).mean(0)
 
                 vx_test_mse += mse[0] * n_samples
                 vy_test_mse += mse[1] * n_samples
                 p_test_mse += mse[2] * n_samples
                 nu_test_mse += mse[3] * n_samples
-                p_surf_test_mse += ((pred_surf[..., 2] - images[graph.surface, 2])**2).mean() * n_samples
+                p_surf_test_mse += (
+                    (pred_surf[..., 2] - images[graph.surface, 2]) ** 2
+                ).mean() * n_samples
 
             code_test_loss = code_test_mse / ntest
             vx_test_mse = vx_test_mse / ntest
@@ -455,7 +484,7 @@ def main(cfg: DictConfig) -> None:
                 ],
                 axis=-1,
             )
-        
+
         with torch.no_grad():
             z_pred = model(inpt)
             loss = ((z_pred - graph.z_fields) ** 2).mean()
@@ -468,16 +497,23 @@ def main(cfg: DictConfig) -> None:
 
         pos = torch.cat([graph.pos, graph.sdf], axis=-1)
         with torch.no_grad():
-            pred = inr_fields.modulated_forward(pos[mask], z_pred[graph.batch] * sigma_fields + mu_fields)
-            pred_surf = inr_fields.modulated_forward(pos[graph.surface], z_pred[graph.batch[graph.surface]] * sigma_fields + mu_fields)
-        
-        mse = ((pred - images[mask])**2).mean(0)
+            pred = inr_fields.modulated_forward(
+                pos[mask], z_pred[graph.batch] * sigma_fields + mu_fields
+            )
+            pred_surf = inr_fields.modulated_forward(
+                pos[graph.surface],
+                z_pred[graph.batch[graph.surface]] * sigma_fields + mu_fields,
+            )
+
+        mse = ((pred - images[mask]) ** 2).mean(0)
 
         vx_test_mse += mse[0] * n_samples
         vy_test_mse += mse[1] * n_samples
         p_test_mse += mse[2] * n_samples
         nu_test_mse += mse[3] * n_samples
-        p_surf_test_mse += ((pred_surf[..., 2] - images[graph.surface, 2])**2).mean() * n_samples
+        p_surf_test_mse += (
+            (pred_surf[..., 2] - images[graph.surface, 2]) ** 2
+        ).mean() * n_samples
 
     code_test_loss = code_test_mse / ntest
     vx_test_mse = vx_test_mse / ntest

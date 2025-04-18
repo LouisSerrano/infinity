@@ -22,7 +22,7 @@ from infinity.mlp import ResNet
 
 @hydra.main(config_path="config/", config_name="regression.yaml")
 def main(cfg: DictConfig) -> None:
-    # 
+    #
     # data
     data_dir = cfg.data.dir
     task = cfg.data.task
@@ -73,8 +73,6 @@ def main(cfg: DictConfig) -> None:
         id=run_id,
         dir=None,
     )
-    
-        
 
     wandb.config.update(
         OmegaConf.to_container(cfg, resolve=True, throw_on_missing=True)

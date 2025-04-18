@@ -11,6 +11,7 @@ import os
 from infinity.utils.reorganize import reorganize
 from infinity.graph_metalearning import outer_step
 
+
 def set_seed(seed=33):
     """Set all seeds for the experiments.
 
@@ -519,7 +520,7 @@ class GeometryDatasetFull(Dataset):
         sample="mesh",
         n_boot=4000,
         surf_ratio=0.1,
-        modulation_only=False
+        modulation_only=False,
     ):
         dataset, coef_norm = get_dataset(
             set,
@@ -603,7 +604,9 @@ class GeometryDatasetFull(Dataset):
 
             graph.z_fields = self.out_modulations["fields"][i].unsqueeze(0)
 
-            graph.z = torch.cat([graph.z_vx, graph.z_vy, graph.z_p, graph.z_nu], axis=-1)
+            graph.z = torch.cat(
+                [graph.z_vx, graph.z_vy, graph.z_p, graph.z_nu], axis=-1
+            )
 
             graph.surface = self.dataset[i].surf[mask]
 

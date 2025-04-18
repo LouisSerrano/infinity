@@ -10,13 +10,7 @@ def thickness_dist(t, x, CTE=True):
     return (
         5
         * t
-        * (
-            0.2969 * np.sqrt(x)
-            - 0.1260 * x
-            - 0.3516 * x**2
-            + 0.2843 * x**3
-            + a * x**4
-        )
+        * (0.2969 * np.sqrt(x) - 0.1260 * x - 0.3516 * x**2 + 0.2843 * x**3 + a * x**4)
     )
 
 
@@ -69,9 +63,7 @@ def camber_line(params, x):
             y_c[mask1] = k_1 * (
                 (x[mask1] ** 3 - 3 * m * x[mask1] ** 2 + m**2 * (3 - m) * x[mask1])
             )
-            dy_c[mask1] = k_1 * (
-                3 * x[mask1] ** 2 - 6 * m * x[mask1] + m**2 * (3 - m)
-            )
+            dy_c[mask1] = k_1 * (3 * x[mask1] ** 2 - 6 * m * x[mask1] + m**2 * (3 - m))
             y_c[mask2] = k_1 * m**3 * (1 - x[mask2])
             dy_c[mask2] = -k_1 * m**3 * np.ones_like(dy_c[mask2])
 
@@ -90,9 +82,7 @@ def camber_line(params, x):
                 - m**3 * x[mask2]
                 + m**3
             )
-            dy_c[mask2] = k_1 * (
-                3 * k * (x[mask2] - m) ** 2 - k * (1 - m) ** 3 - m**3
-            )
+            dy_c[mask2] = k_1 * (3 * k * (x[mask2] - m) ** 2 - k * (1 - m) ** 3 - m**3)
 
         else:
             raise ValueError("Q must be 0 for normal camber or 1 for reflex camber.")
