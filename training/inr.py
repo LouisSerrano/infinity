@@ -18,12 +18,9 @@ from infinity.fourier_features import ModulatedFourierFeatures
 from infinity.data.dataset import GeometryDatasetFull, KEY_TO_INDEX
 from infinity.utils.load_inr import create_inr_instance
 
-import airfrans as af
-
-
 @hydra.main(config_path="config/", config_name="fourier_features.yaml")
 def main(cfg: DictConfig) -> None:
-    # submitit.JobEnvironment()
+    # 
     # data
     data_dir = cfg.data.dir
     task = cfg.data.task
@@ -94,8 +91,7 @@ def main(cfg: DictConfig) -> None:
         with open(Path(data_dir) / "Dataset/manifest.json", "r") as f:
             manifest = json.load(f)
     except FileNotFoundError:
-        print("No manifest.json file found. Downloading the airfrance dataset")
-        af.dataset.download(root = Path(data_dir) , unzip = True)
+        print("No manifest.json file found. You should download the airfrans dataset first.")
 
     trainset = manifest[task + "_train"]
     testset = manifest[task + "_test"] if task != "scarce" else manifest["full_test"]
@@ -166,19 +162,24 @@ def main(cfg: DictConfig) -> None:
         weight_decay=0,
     )
 
-    # patience was set to 100 before
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer,
-        mode="min",
-        factor=0.5,
-        patience=500,
-        threshold=0.01,
-        threshold_mode="rel",
-        cooldown=0,
-        min_lr=1e-5,
-        eps=1e-08,
-        verbose=True,
-    )
+    # This Plateau scheduler looks suspicious actually. 
+    # It might be better to use a simple Cosine at every step (rather than epoch).
+
+    #scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+    #    optimizer,
+    #    mode="min",
+    #    factor=0.5,
+    #    patience=500,
+    #    threshold=0.01,
+    #    threshold_mode="rel",
+    #    cooldown=0,
+    #    min_lr=1e-5,
+    #    eps=1e-08,
+    #    verbose=True,
+    #)
+
+    total_steps = epochs * len(train_loader)  # 100 * 200 = 20,000
+    scheduler = scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=total_steps)
 
     best_loss = np.inf
 
@@ -236,6 +237,8 @@ def main(cfg: DictConfig) -> None:
             outputs["loss"].backward(create_graph=False)
             nn.utils.clip_grad_value_(inr.parameters(), clip_value=1.0)
             optimizer.step()
+            scheduler.step()
+            
             loss = outputs["loss"].cpu().detach()
             fit_train_mse += loss.item() * n_samples
             if data_to_encode == 'all_physics_fields':
@@ -247,7 +250,7 @@ def main(cfg: DictConfig) -> None:
                 fit_train_mse_nu += loss_nu.item() * n_samples
 
         train_loss = fit_train_mse / (ntrain)
-        scheduler.step(train_loss)
+        #scheduler.step(train_loss) with plateau
 
         if data_to_encode == 'all_physics_fields':
             train_loss_vx = fit_train_mse_vx / (ntrain)

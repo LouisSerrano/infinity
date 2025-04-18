@@ -78,7 +78,7 @@ def Airfoil_test(internal, airfoil, outs, coef_norm, bool_surf):
 
 @hydra.main(config_path="config/", config_name="regression.yaml")
 def main(cfg: DictConfig) -> None:
-    # submitit.JobEnvironment()
+    # 
     # data
     data_dir = cfg.data.dir
     task = cfg.data.task

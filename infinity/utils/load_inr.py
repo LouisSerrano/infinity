@@ -4,7 +4,6 @@ from infinity.siren import ModulatedSiren
 
 
 def create_inr_instance(cfg, input_dim=3, output_dim=1, device="cuda"):
-    # data_path = "/data/serrano/functa2functa/airfrans/inr/"
 
     device = torch.device(device)
 
@@ -50,9 +49,7 @@ def create_inr_instance(cfg, input_dim=3, output_dim=1, device="cuda"):
 
 
 def load_inr_model(run_dir, run_name, input_dim=2, output_dim=1, device="cuda"):
-    # data_path with the following template: "/data/serrano/functa2functa/airfrans/inr/"
-    # run_dir with the following template: f"{data_path}/{data_to_encode}/
-    inr_train = torch.load(run_dir / f"{run_name}.pt")
+    inr_train = torch.load(run_dir / f"{run_name}.pt", weights_only=False)
 
     inr_state_dict = inr_train["inr"]
     cfg = inr_train["cfg"]

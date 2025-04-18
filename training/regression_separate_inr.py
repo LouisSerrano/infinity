@@ -22,7 +22,7 @@ from infinity.mlp import ResNet
 
 @hydra.main(config_path="config/", config_name="regression.yaml")
 def main(cfg: DictConfig) -> None:
-    # submitit.JobEnvironment()
+    # 
     # data
     data_dir = cfg.data.dir
     task = cfg.data.task

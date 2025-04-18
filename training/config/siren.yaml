@@ -5,11 +5,6 @@ defaults:
   - inr: null
   - wandb: null
 
-functa:
-  dataset_name:
-  run_name:
-  encoding_steps: 3
-
 data:
   dir: /data/serrano/airfrans/
   data_to_encode: sdf

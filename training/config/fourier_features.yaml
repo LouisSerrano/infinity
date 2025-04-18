@@ -5,11 +5,6 @@ defaults:
   - inr: null
   - wandb: null
 
-functa:
-  dataset_name:
-  run_name:
-  encoding_steps: 3
-
 data:
   dir: /data/serrano/airfrans/
   data_to_encode: all_physics_fields
@@ -23,14 +18,14 @@ data:
 optim:
   batch_size: 64
   batch_size_val: 
-  lr_inr : 5e-4 #5e-5
+  lr_inr : 5e-4 #5e-4 unstable if I remember
   lr_code : 0.01
   lr_encoder: 1e-3
   meta_lr_code : 5e-5
   weight_decay_code: 0
   inner_steps : 3
   test_inner_steps : 3
-  epochs : 10000
+  epochs : 10000 # 1000 for faster training but less accurate
   weight_decay: 0
 
 inr:
@@ -43,8 +38,8 @@ inr:
   modulate_scale: False
   modulate_shift: True
   frequency_embedding: nerf
-  max_frequencies: 32 #10
-  base_frequency: 1.25 #2
+  max_frequencies: 10 #32
+  base_frequency: 2 #1.25
   scale : 5
   loss_type: "mse"
 

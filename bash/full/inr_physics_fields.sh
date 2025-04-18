@@ -3,7 +3,7 @@
 #SBATCH --job-name=geo
 #SBATCH --nodes=1
 #SBATCH --gpus-per-node=1
-#SBATCH --time=5000
+#SBATCH --time=1000
 #SBATCH --output=slurm_run/%x-%j.out
 #SBATCH --error=slurm_run/%x-%j.err
 

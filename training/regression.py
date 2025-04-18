@@ -22,7 +22,7 @@ from infinity.mlp import ResNet
 
 @hydra.main(config_path="config/", config_name="regression.yaml")
 def main(cfg: DictConfig) -> None:
-    # submitit.JobEnvironment()
+    # 
     # data
     data_dir = cfg.data.dir
     task = cfg.data.task
@@ -31,6 +31,7 @@ def main(cfg: DictConfig) -> None:
     ntrain = cfg.data.ntrain
     ntest = cfg.data.ntest
     seed = cfg.data.seed
+    include_normal = cfg.data.include_normal
 
     # optim
     batch_size = cfg.optim.batch_size
@@ -42,13 +43,9 @@ def main(cfg: DictConfig) -> None:
     weight_decay = cfg.optim.weight_decay
 
     # inr
-    run_name_vx = cfg.inr.run_dict.vx  # "bright-totem-286"
-    run_name_vy = cfg.inr.run_dict.vy  # "devoted-puddle-287"
-    run_name_p = cfg.inr.run_dict.p  # "serene-vortex-284"
-    run_name_nu = cfg.inr.run_dict.nu  # "wandering-bee-288"
-    run_name_sdf = cfg.inr.run_dict.sdf  # "earnest-paper-289"
-    run_name_n = cfg.inr.run_dict.n  # "astral-leaf-330"
-    run_name_fields = cfg.inr.run_dict.fields
+    run_name_sdf = cfg.inr.run_dict.sdf
+    run_name_n = cfg.inr.run_dict.n  
+    run_name_fields = cfg.inr.run_dict.all_physics_fields
 
     # model
     model_type = cfg.model.model_type
@@ -80,9 +77,6 @@ def main(cfg: DictConfig) -> None:
     )
     run_name = wandb.run.name
 
-    print("id", run.id)
-    print("dir", run.dir)
-
     LOAD_DIR = Path(os.getenv("WANDB_DIR")) / "airfrans" / task / "inr"
     RESULTS_DIR = Path(os.getenv("WANDB_DIR")) / "airfrans" / task / "model"
     MODULATIONS_DIR = Path(os.getenv("WANDB_DIR")) / "airfrans" / task / "modulations"
@@ -105,7 +99,7 @@ def main(cfg: DictConfig) -> None:
     ntrain = len(trainset)
     ntest = len(testset)
 
-    tmp = torch.load(LOAD_DIR / "all_physics_fields" / f"{run_name_fields}.pt")
+    tmp = torch.load(LOAD_DIR / "all_physics_fields" / f"{run_name_fields}.pt", weights_only=False)
     latent_dim = tmp["cfg"].inr.latent_dim
 
     # default sample is none
@@ -137,9 +131,11 @@ def main(cfg: DictConfig) -> None:
     inr_sdf, alpha_sdf = load_inr_model(
         LOAD_DIR / "sdf", run_name_sdf, input_dim=2, output_dim=1
     )
-    inr_n, alpha_n = load_inr_model(
-        LOAD_DIR / "n", run_name_n, input_dim=2, output_dim=2
-    )
+
+    if include_normal:
+        inr_n, alpha_n = load_inr_model(
+            LOAD_DIR / "n", run_name_n, input_dim=2, output_dim=2
+        )
 
     mod_fields = load_modulations(
         trainset, testset, inr_fields, MODULATIONS_DIR, run_name_fields, "all_physics_fields", alpha=alpha_fields
@@ -155,7 +151,8 @@ def main(cfg: DictConfig) -> None:
         alpha=alpha_sdf,
         input_dim=2,
     )
-    mod_n = load_modulations(
+    if include_normal:
+        mod_n = load_modulations(
         trainset,
         testset,
         inr_n,
@@ -164,7 +161,7 @@ def main(cfg: DictConfig) -> None:
         "n",
         alpha=alpha_n,
         input_dim=2,
-    )
+        )
 
     gamma = 1
 
@@ -174,33 +171,37 @@ def main(cfg: DictConfig) -> None:
     mu_sdf = mod_sdf["z_train"].mean(0)
     sigma_sdf = mod_sdf["z_train"].std(0)
 
-    mu_n = mod_n["z_train"].mean(0)
-    sigma_n = mod_n["z_train"].std(0)
-
+    if include_normal:
+        mu_n = mod_n["z_train"].mean(0)
+        sigma_n = mod_n["z_train"].std(0)
 
     trainset.out_modulations["fields"] = (mod_fields["z_train"] - mu_fields) / sigma_fields
-
     trainset.in_modulations["sdf"] = (mod_sdf["z_train"] - mu_sdf) / sigma_sdf
-    trainset.in_modulations["n"] = (mod_n["z_train"] - mu_n) / sigma_n
+
+    if include_normal:
+        trainset.in_modulations["n"] = (mod_n["z_train"] - mu_n) / sigma_n
 
     testset.out_modulations["fields"] = (mod_fields["z_test"] - mu_fields) / sigma_fields
-
     testset.in_modulations["sdf"] = (mod_sdf["z_test"] - mu_sdf) / sigma_sdf
-    testset.in_modulations["n"] = (mod_n["z_test"] - mu_n) / sigma_n
+
+    if include_normal:
+        testset.in_modulations["n"] = (mod_n["z_test"] - mu_n) / sigma_n
 
     train_loader = DataLoader(trainset, batch_size=batch_size, shuffle=True)
     # test
     test_loader = DataLoader(testset, batch_size=batch_size_val, shuffle=True)
 
     model = ResNet(
-        input_dim=latent_dim + 2,
+        input_dim=2*latent_dim + 2 if include_normal else latent_dim + 1,
         hidden_dim=width,
         output_dim=latent_dim,
         depth=depth,
         dropout=0.0,
         activation=activation,
     ).cuda()
+
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
+ 
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer,
         mode="min",
@@ -240,18 +241,26 @@ def main(cfg: DictConfig) -> None:
             graph = graph.cuda()
             n_samples = len(graph)
 
-            # print(graph.z_sdf.shape, graph.z_n.shape, graph.inlet_x.shape, graph.inlet_y.shape)
-
-            ipt = torch.cat(
+            if include_normal:
+                  inpt = torch.cat(
                 [
                     graph.z_sdf,
-                    #graph.z_n,
+                    graph.z_n,
                     graph.inlet_x.unsqueeze(-1),
                     graph.inlet_y.unsqueeze(-1),
                 ],
                 axis=-1,
             )
-            z_pred = model(ipt)
+            else:
+                inpt = torch.cat(
+                    [
+                        graph.z_sdf,
+                        graph.inlet_x.unsqueeze(-1),
+                        graph.inlet_y.unsqueeze(-1),
+                    ],
+                    axis=-1,
+                )
+            z_pred = model(inpt)
             loss = ((z_pred - graph.z_fields) ** 2).mean()
 
             optimizer.zero_grad()
@@ -260,7 +269,7 @@ def main(cfg: DictConfig) -> None:
             code_train_mse += loss.item() * n_samples
 
             if step_show:
-                num_points = n_samples * 4000
+                num_points = n_samples * 4000 # 4000 points per sample
                 mask = torch.randperm(graph.pos.shape[0])[:num_points]
                 batch = graph.batch[mask]
                 mask_surf = graph.surface[mask]
@@ -282,11 +291,6 @@ def main(cfg: DictConfig) -> None:
                 p_surf_train_mse += ((pred_surf[..., 2] - images[graph.surface, 2])**2).mean() * n_samples
 
         code_train_loss = code_train_mse / ntrain
-        #vx_train_mse = vx_train_mse / ntrain
-        #vy_train_mse = vy_train_mse / ntrain
-        #p_train_mse = p_train_mse / ntrain
-        #p_surf_train_mse = p_surf_train_mse / ntrain
-        #nu_train_mse = nu_train_mse / ntrain
 
         scheduler.step(code_train_loss)
 
@@ -308,16 +312,27 @@ def main(cfg: DictConfig) -> None:
                 graph = graph.cuda()
                 n_samples = len(graph)
 
-                ipt = torch.cat(
+                if include_normal:
+                    inpt = torch.cat(
                     [
                         graph.z_sdf,
-                        #graph.z_n,
+                        graph.z_n,
+                        graph.inlet_x.unsqueeze(-1),
+                        graph.inlet_y.unsqueeze(-1),
+                    ],
+                    axis=-1)
+
+                else:
+                    inpt = torch.cat(
+                    [
+                        graph.z_sdf,
                         graph.inlet_x.unsqueeze(-1),
                         graph.inlet_y.unsqueeze(-1),
                     ],
                     axis=-1,
                 )
-                z_pred = model(ipt)
+
+                z_pred = model(inpt)
                 loss = ((z_pred - graph.z_fields) ** 2).mean()
                 code_test_mse += loss.item() * n_samples
 
@@ -393,6 +408,8 @@ def main(cfg: DictConfig) -> None:
                 f"{RESULTS_DIR}/{run_name}.pt",
             )
 
+    # test to have the final results at the end of training
+
     # load the best model during training
     load_dict = torch.load(f"{RESULTS_DIR}/{run_name}.pt")
     model.load_state_dict(load_dict["model"])
@@ -419,18 +436,28 @@ def main(cfg: DictConfig) -> None:
         graph = graph.cuda()
         n_samples = len(graph)
 
-        ipt = torch.cat(
-            [
-                graph.z_sdf,
-                #graph.z_n,
-                graph.inlet_x.unsqueeze(-1),
-                graph.inlet_y.unsqueeze(-1),
-            ],
-            axis=-1,
-        )
+        if include_normal:
+            inpt = torch.cat(
+                [
+                    graph.z_sdf,
+                    graph.z_n,
+                    graph.inlet_x.unsqueeze(-1),
+                    graph.inlet_y.unsqueeze(-1),
+                ],
+                axis=-1,
+            )
+        else:
+            inpt = torch.cat(
+                [
+                    graph.z_sdf,
+                    graph.inlet_x.unsqueeze(-1),
+                    graph.inlet_y.unsqueeze(-1),
+                ],
+                axis=-1,
+            )
         
         with torch.no_grad():
-            z_pred = model(ipt)
+            z_pred = model(inpt)
             loss = ((z_pred - graph.z_fields) ** 2).mean()
             code_test_mse += loss.item() * n_samples
 
@@ -459,6 +486,7 @@ def main(cfg: DictConfig) -> None:
     p_surf_test_mse = p_surf_test_mse / ntest
     nu_test_mse = nu_test_mse / ntest
 
+    print("Test results without subsampling | Volume and Surface scores: \n")
     print(
         f"Test code: {code_test_loss}, vx: {vx_test_mse}, vy: {vy_test_mse}, p: {p_test_mse}, nu: {nu_test_mse}, p surf: {p_surf_test_mse}"
     )
