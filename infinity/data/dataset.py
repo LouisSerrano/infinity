@@ -3,7 +3,6 @@ import pyvista as pv
 
 import torch
 from torch_geometric.data import Data, Dataset
-from sklearn.cluster import KMeans, BisectingKMeans
 from torch_geometric.loader import DataLoader
 import random
 from tqdm import tqdm
@@ -11,7 +10,6 @@ import os
 
 from infinity.utils.reorganize import reorganize
 from infinity.graph_metalearning import outer_step
-
 
 def set_seed(seed=33):
     """Set all seeds for the experiments.
@@ -269,36 +267,6 @@ def get_dataset(
             surf_init = surf_sampled_points[:, :7]
             surf_target = surf_sampled_points[:, 7:]
 
-            # if cell_centers:
-            #     centers = internal.ptc().cell_centers()
-            #     surf_centers = aerofoil.cell_centers()
-
-            #     geom = -centers.cell_data['implicit_distance'][:, None] # Signed distance function
-            #     Uinf, alpha = float(s.split('_')[2]), float(s.split('_')[3])*np.pi/180
-            #     u = (np.array([np.cos(alpha), np.sin(alpha)])*Uinf).reshape(1, 2)*np.ones_like(internal.cell_data['U'][:, :1])
-            #     normal = np.zeros_like(u)
-
-            #     surf_geom = np.zeros_like(surf_centers.cell_data['U'][:, :1])
-            #     # surf_u = np.zeros_like(surf_centers.cell_data['U'][:, :2])
-            #     surf_u = (np.array([np.cos(alpha), np.sin(alpha)])*Uinf).reshape(1, 2)*np.ones_like(surf_centers.cell_data['U'][:, :1])
-            #     surf_normal = -aerofoil.cell_data['Normals'][:, :2]
-
-            #     attr = np.concatenate([u, geom, normal,
-            #         internal.cell_data['U'][:, :2], internal.cell_data['p'][:, None], internal.cell_data['nut'][:, None]], axis = -1)
-            #     surf_attr = np.concatenate([surf_u, surf_geom, surf_normal,
-            #         aerofoil.cell_data['U'][:, :2], aerofoil.cell_data['p'][:, None], aerofoil.cell_data['nut'][:, None]], axis = -1)
-
-            #     bool_centers = np.concatenate([np.ones_like(centers.points[:, 0]), np.zeros_like(pos[:, 0])], axis = 0)
-            #     surf_bool_centers = np.concatenate([np.ones_like(surf_centers.points[:, 0]), np.zeros_like(surf_pos[:, 0])], axis = 0)
-            #     pos = np.concatenate([centers.points[:, :2], pos], axis = 0)
-            #     init = np.concatenate([np.concatenate([centers.points[:, :2], attr[:, :6]], axis = 1), init], axis = 0)
-            #     target = np.concatenate([attr[:, 6:], target], axis = 0)
-            #     surf_pos = np.concatenate([surf_centers.points[:, :2], surf_pos], axis = 0)
-            #     surf_init = np.concatenate([np.concatenate([surf_centers.points[:, :2], surf_attr[:, :6]], axis = 1), surf_init], axis = 0)
-            #     surf_target = np.concatenate([surf_attr[:, 6:], surf_target], axis = 0)
-
-            #     centers = torch.cat([torch.tensor(bool_centers), torch.tensor(surf_bool_centers)], dim = 0)
-
             # Put everything in tensor
             surf = torch.cat([torch.zeros(len(pos)), torch.ones(len(surf_pos))], dim=0)
             pos = torch.cat(
@@ -536,135 +504,6 @@ class GeometryDataset(Dataset):
                     )
 
                 return (graph, i)
-
-
-class GeometryDatasetGraph(Dataset):
-    def __init__(
-        self,
-        set,
-        key=None,
-        num_nodes=64,
-        latent_dim=16,
-        scale_factor=1.0,
-        norm=False,
-        coef_norm=None,
-        crop=None,
-        sample="mesh",
-        n_boot=8000,
-        surf_ratio=0.1,
-    ):
-        dataset, coef_norm = get_dataset(
-            set,
-            norm=norm,
-            coef_norm=coef_norm,
-            crop=crop,
-            sample=None,
-            n_boot=n_boot,
-            surf_ratio=surf_ratio,
-        )
-        self.dataset = dataset
-        self.coef_norm = coef_norm
-        self.latent_dim = latent_dim
-        print("coef_norm", coef_norm)
-        self.modulations = torch.zeros(len(self.dataset), latent_dim)
-        self.key = key
-        self.scale_factor = scale_factor
-        if key is not None:
-            self.index = KEY_TO_INDEX[key]
-            self.input_key = self.index <= 6
-            self.relative_index = self.index if self.index <= 6 else self.index - 7
-        self.sample = sample
-        self.n_points = n_boot
-        self.num_nodes = num_nodes
-        self.latent_dim = latent_dim
-        self.set_modulation_pos()
-
-    def set_modulation_pos(self):
-        self.modulation_pos = torch.zeros(len(self.dataset), self.num_nodes, 2)
-        for i in range(len(self.dataset)):
-            clustering = BisectingKMeans(n_clusters=self.num_nodes, max_iter=1000)
-            clustering.fit(self.dataset[i].pos)
-            self.modulation_pos[i] = torch.from_numpy(clustering.cluster_centers_)
-
-    def __len__(self):
-        return len(self.dataset)
-
-    def __getitem__(self, i):
-        if self.sample == "mesh":
-            mask = torch.randperm(self.dataset[i].pos.shape[0])[: self.n_points]
-            if self.key == None:
-                modulations = Data(
-                    pos=self.modulation_pos[i],
-                    features=torch.zeros(self.num_nodes, self.latent_dim),
-                )
-                return (
-                    self.dataset[i].pos[mask],
-                    self.dataset[i].x[mask],
-                    self.dataset[i].y[mask],
-                    modulations,
-                    i,
-                )
-
-            else:
-                scaled_pos = (
-                    (self.dataset[i].pos[mask] - MIN_POS)
-                    / (MAX_POS - MIN_POS)
-                    * self.scale_factor
-                )
-                graph = Data(pos=scaled_pos, edge_index=None)
-                graph.surface = self.dataset[i].surf[mask]
-                graph.sdf = self.dataset[i].x[mask, KEY_TO_INDEX["sdf"]].unsqueeze(-1)
-                modulations = Data(
-                    pos=(self.modulation_pos[i] - MIN_POS)
-                    / (MAX_POS - MIN_POS)
-                    * self.scale_factor,
-                    features=torch.zeros(self.num_nodes, self.latent_dim),
-                )
-
-                if self.input_key:
-                    graph.images = (
-                        self.dataset[i].x[mask, self.relative_index].unsqueeze(-1)
-                    )
-                else:
-                    graph.images = (
-                        self.dataset[i].y[mask, self.relative_index].unsqueeze(-1)
-                    )
-
-                return (graph, modulations, i)
-        else:
-            if self.key == None:
-                modulations = Data(
-                    pos=self.modulation_pos[i],
-                    features=torch.zeros(self.num_nodes, self.latent_dim),
-                )
-                return (self.dataset[i], modulations, i)
-
-            else:
-                scaled_pos = (
-                    (self.dataset[i].pos - MIN_POS)
-                    / (MAX_POS - MIN_POS)
-                    * self.scale_factor
-                )
-                graph = Data(pos=scaled_pos, edge_index=None)
-                graph.surface = self.dataset[i].surf
-                graph.sdf = self.dataset[i].x[..., KEY_TO_INDEX["sdf"]].unsqueeze(-1)
-                modulations = Data(
-                    pos=(self.modulation_pos[i] - MIN_POS)
-                    / (MAX_POS - MIN_POS)
-                    * self.scale_factor,
-                    features=torch.zeros(self.num_nodes, self.latent_dim),
-                )
-
-                if self.input_key:
-                    graph.images = (
-                        self.dataset[i].x[..., self.relative_index].unsqueeze(-1)
-                    )
-                else:
-                    graph.images = (
-                        self.dataset[i].y[..., self.relative_index].unsqueeze(-1)
-                    )
-
-                return (graph, modulations, i)
 
 
 class GeometryDatasetFull(Dataset):

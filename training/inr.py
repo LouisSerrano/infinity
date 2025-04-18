@@ -7,6 +7,7 @@ import hydra
 import numpy as np
 import torch
 import torch.nn as nn
+import pdb
 import wandb
 from omegaconf import DictConfig, OmegaConf
 from torch_geometric.loader import DataLoader
@@ -16,6 +17,8 @@ from infinity.graph_metalearning import outer_step
 from infinity.fourier_features import ModulatedFourierFeatures
 from infinity.data.dataset import GeometryDatasetFull, KEY_TO_INDEX
 from infinity.utils.load_inr import create_inr_instance
+
+import airfrans as af
 
 
 @hydra.main(config_path="config/", config_name="fourier_features.yaml")
@@ -68,8 +71,6 @@ def main(cfg: DictConfig) -> None:
         dir=None,
     )
     
-        
-
     wandb.config.update(
         OmegaConf.to_container(cfg, resolve=True, throw_on_missing=True)
     )
@@ -89,8 +90,12 @@ def main(cfg: DictConfig) -> None:
     run.tags = ("inr",) + (task,) + (data_to_encode,) + (model_type,)
 
     # train
-    with open(Path(data_dir) / "Dataset/manifest.json", "r") as f:
-        manifest = json.load(f)
+    try:
+        with open(Path(data_dir) / "Dataset/manifest.json", "r") as f:
+            manifest = json.load(f)
+    except FileNotFoundError:
+        print("No manifest.json file found. Downloading the airfrance dataset")
+        af.dataset.download(root = Path(data_dir) , unzip = True)
 
     trainset = manifest[task + "_train"]
     testset = manifest[task + "_test"] if task != "scarce" else manifest["full_test"]
@@ -115,6 +120,11 @@ def main(cfg: DictConfig) -> None:
     else:
         include_sdf = True
         input_dim = input_dim + 1
+    
+    return_dim_loss = False
+    if data_to_encode=='all_physics_fields':
+        output_dim = output_dim + 3
+        return_dim_loss = True
 
     # default sample is none
     trainset = GeometryDatasetFull(
@@ -177,6 +187,10 @@ def main(cfg: DictConfig) -> None:
         fit_test_mse = 0
         step_show = step % 100 == 0
 
+        if data_to_encode == 'all_physics_fields':
+            fit_train_mse_vx, fit_train_mse_vy, fit_train_mse_p, fit_train_mse_nu = 0, 0, 0, 0
+            fit_test_mse_vx, fit_test_mse_vy, fit_test_mse_p, fit_test_mse_nu = 0, 0, 0, 0
+
         for substep, (graph, idx) in enumerate(train_loader):
             inr.train()
 
@@ -199,6 +213,8 @@ def main(cfg: DictConfig) -> None:
                 graph.images = graph.nx
             elif data_to_encode == "ny":
                 graph.images = graph.ny
+            elif data_to_encode == "all_physics_fields":
+                graph.images = torch.cat([graph.vx, graph.vy, graph.p, graph.nu], axis=-1)
 
             graph.modulations = torch.zeros((len(graph), latent_dim))
             graph = graph.cuda()
@@ -211,6 +227,7 @@ def main(cfg: DictConfig) -> None:
                 alpha,
                 is_train=True,
                 return_reconstructions=step_show,
+                return_dim_loss=return_dim_loss,
                 gradient_checkpointing=False,
                 use_rel_loss=False,
             )
@@ -221,9 +238,22 @@ def main(cfg: DictConfig) -> None:
             optimizer.step()
             loss = outputs["loss"].cpu().detach()
             fit_train_mse += loss.item() * n_samples
+            if data_to_encode == 'all_physics_fields':
+                loss_dim_tot = outputs["dim_loss"].cpu().detach()
+                loss_vx, loss_vy, loss_p, loss_nu = loss_dim_tot[0], loss_dim_tot[1], loss_dim_tot[2], loss_dim_tot[3]
+                fit_train_mse_vx += loss_vx.item() * n_samples
+                fit_train_mse_vy += loss_vy.item() * n_samples
+                fit_train_mse_p += loss_p.item() * n_samples
+                fit_train_mse_nu += loss_nu.item() * n_samples
 
         train_loss = fit_train_mse / (ntrain)
         scheduler.step(train_loss)
+
+        if data_to_encode == 'all_physics_fields':
+            train_loss_vx = fit_train_mse_vx / (ntrain)
+            train_loss_vy = fit_train_mse_vy / (ntrain)
+            train_loss_p = fit_train_mse_p / (ntrain)
+            train_loss_nu = fit_train_mse_nu / (ntrain)
 
         if step_show:
             for substep, (graph, idx) in enumerate(test_loader):
@@ -247,6 +277,8 @@ def main(cfg: DictConfig) -> None:
                     graph.images = graph.nx
                 elif data_to_encode == "ny":
                     graph.images = graph.ny
+                elif data_to_encode == "all_physics_fields":
+                    graph.images = torch.cat([graph.vx, graph.vy, graph.p, graph.nu], axis=-1)
 
                 graph.modulations = torch.zeros((len(graph), latent_dim))
                 graph = graph.cuda()
@@ -259,25 +291,68 @@ def main(cfg: DictConfig) -> None:
                     alpha,
                     is_train=False,
                     return_reconstructions=step_show,
+                    return_dim_loss=return_dim_loss,
                     gradient_checkpointing=False,
                     use_rel_loss=False,
                 )
 
                 loss = outputs["loss"]
                 fit_test_mse += loss.item() * n_samples
+                if data_to_encode == 'all_physics_fields':
+                    loss_dim_tot = outputs["dim_loss"].cpu().detach()
+                    loss_vx, loss_vy, loss_p, loss_nu = loss_dim_tot[0], loss_dim_tot[1], loss_dim_tot[2], loss_dim_tot[3]
+                    fit_test_mse_vx += loss_vx.item() * n_samples
+                    fit_test_mse_vy += loss_vy.item() * n_samples
+                    fit_test_mse_p += loss_p.item() * n_samples
+                    fit_test_mse_nu += loss_nu.item() * n_samples
 
             test_loss = fit_test_mse / ntest
+            if data_to_encode == 'all_physics_fields':
+                test_loss_vx = fit_test_mse_vx / (ntest)
+                test_loss_vy = fit_test_mse_vy / (ntest)
+                test_loss_p = fit_test_mse_p / (ntest)
+                test_loss_nu = fit_test_mse_nu / (ntest)
 
         if step_show:
-            wandb.log(
+            if data_to_encode == 'all_physics_fields':
+                wandb.log(
+                    {
+                "test_loss_vx": test_loss_vx,
+                "test_loss_vy": test_loss_vy,
+                "test_loss_p": test_loss_p,
+                "test_loss_nu": test_loss_nu,
+                "train_loss_vx": train_loss_vx,
+                "train_loss_vy": train_loss_vy,
+                "train_loss_p": train_loss_p,
+                "train_loss_nu": train_loss_nu,
+                "test_loss": test_loss,
+                "train_loss": train_loss,
+                },
+                step=step)
+
+            else:
+                wandb.log(
                 {
                     "test_loss": test_loss,
                     "train_loss": train_loss,
                 },
-            )
+                step=step
+                )
 
         else:
-            wandb.log(
+            if data_to_encode == 'all_physics_fields':
+                wandb.log(
+                    {
+                        "train_loss_vx": train_loss_vx,
+                        "train_loss_vy": train_loss_vy,
+                        "train_loss_p": train_loss_p,
+                        "train_loss_nu": train_loss_nu,
+                        "train_loss": train_loss,
+                    },
+                    step=step
+                )
+            else:
+                wandb.log(
                 {
                     "train_loss": train_loss,
                 },

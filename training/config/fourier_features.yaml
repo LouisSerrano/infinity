@@ -12,7 +12,7 @@ functa:
 
 data:
   dir: /data/serrano/airfrans/
-  data_to_encode: vx
+  data_to_encode: all_physics_fields
   sample: mesh
   task: full
   score: 0 
@@ -23,7 +23,7 @@ data:
 optim:
   batch_size: 64
   batch_size_val: 
-  lr_inr : 5e-5
+  lr_inr : 5e-4 #5e-5
   lr_code : 0.01
   lr_encoder: 1e-3
   meta_lr_code : 5e-5
@@ -35,22 +35,22 @@ optim:
 
 inr:
   model_type : "fourier_features"
-  include_input: False
+  include_input: True
   latent_dim : 256
   depth : 6
   hidden_dim : 256
-  num_frequencies : 32
+  num_frequencies : 64 #32
   modulate_scale: False
   modulate_shift: True
   frequency_embedding: nerf
-  max_frequencies: 10
-  base_frequency: 2
+  max_frequencies: 32 #10
+  base_frequency: 1.25 #2
   scale : 5
   loss_type: "mse"
 
 wandb:
   entity: "spatiotemp-isir"
-  project: "geo-pde-inr"
+  project: "infinity"
   name: 
   id: 
   dir: 

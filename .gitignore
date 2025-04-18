@@ -141,7 +141,6 @@ xp*
 
 #data
 data/models/*
-data/modulations/*
 
 .codecarbon.config
 codecarbon.config

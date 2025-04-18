@@ -12,7 +12,7 @@ functa:
 
 data:
   dir: /data/serrano/airfrans/
-  data_to_encode: sdf
+  data_to_encode: vx
   sample: mesh
   task: full
   score: 0 
