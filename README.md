@@ -1,4 +1,4 @@
-# INFINITY: Code of the INFINITY Paper  
+# Code of the INFINITY Paper  
 📄 [OpenReview Link](https://openreview.net/forum?id=B3n6VOBTjx#all)
 
 ## 📚 Citation
